@@ -1,0 +1,10 @@
+# swap files
+*.swp
+
+# Cabal sandbox
+.cabal-sandbox
+cabal.sandbox.config
+dist/
+
+# Testing data
+*.csv
