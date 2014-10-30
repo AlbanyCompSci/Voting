@@ -28,8 +28,10 @@ data Vote = Vote
     , rankvote :: Maybe RankVote
     } deriving (Eq, Show)
 
-newtype ListVote = ListVote [SBCandidate] deriving (Eq, Show)
-newtype RankVote = RankVote (Map.Map SBCandidate (Maybe Int)) deriving (Eq, Show)
+newtype ListVote = ListVote { unLV :: [SBCandidate] }
+    deriving (Eq, Show)
+newtype RankVote = RankVote { unRV :: Map.Map SBCandidate (Maybe Int) }
+    deriving (Eq, Show)
 
 data GCandidate = Brown | Kashkari
                         deriving (Eq, Ord, Enum, Bounded, Show)

@@ -1,14 +1,14 @@
 module Count where
 
-import Control.Applicative (empty, pure, (<|>))
+import Control.Applicative (empty, pure, (<|>), (<$>), (<*>))
 import qualified Data.Map as M
-import Data.Monoid (Monoid, mappend, mempty)
+import Data.Monoid (Monoid, mappend, mempty, (<>))
 import Data.Foldable (foldMap)
 import Data.List (nub, union)
 import Data.Function (on)
+import Data.Maybe (catMaybes)
 
 import Types
-import Parse () -- FromNamedRecord Vote
 
 reconcile :: Vote -> Vote -> Maybe Vote
 reconcile a b
@@ -33,15 +33,15 @@ reconcile a b
                     (rankvote a <|> rankvote b)
 
 data Tally = Tally
-    { tgovernor :: Count GCandidate
-    , tprop1    :: Count GCandidate
-    , tprop2    :: Count GCandidate
-    , tprop45   :: Count GCandidate
-    , tprop46   :: Count GCandidate
-    , tprop47   :: Count GCandidate
-    , tprop48   :: Count GCandidate
-    , tlistvote :: ()
-    , trankvote :: ()
+    { tgovernor :: Count     GCandidate
+    , tprop1    :: Count     Bool
+    , tprop2    :: Count     Bool
+    , tprop45   :: Count     Bool
+    , tprop46   :: Count     Bool
+    , tprop47   :: Count     Bool
+    , tprop48   :: Count     Bool
+    , tlistvote :: Count     SBCandidate
+    , trankvote :: RankCount SBCandidate
     }
 
 newtype Count a = Count { unCount :: M.Map a Int }
@@ -50,9 +50,15 @@ instance Ord a => Monoid (Count a) where
     mempty = Count M.empty
     mappend a b = Count $ M.unionWith (+) (unCount a) (unCount b)
 
-mkCount :: Maybe a -> Count a
-mkCount Nothing  = Count M.empty
-mkCount (Just a) = Count $ M.singleton a 1
+mayToCount :: Maybe a -> Count a
+mayToCount Nothing  = Count M.empty
+mayToCount (Just a) = Count $ M.singleton a 1
+
+mayListVoteToCount :: Maybe ListVote -> Count SBCandidate
+mayListVoteToCount Nothing              = Count M.empty
+mayListVoteToCount (Just (ListVote [])) = Count M.empty
+mayListVoteToCount (Just (ListVote vs)) = Count $ M.fromList
+                                        $ zip vs (repeat 1)
 
 newtype MaxKV k v = MaxKV { unMaxKV :: [(k,v)] }
 
@@ -71,3 +77,38 @@ maxsBy f = foldr accum []
 
 winner :: Eq a => Count a -> [a]
 winner = map fst . unMaxKV . foldMap (MaxKV . return) . M.toList . unCount
+
+data RankCount a = RankCount a
+
+instance Monoid (RankCount a) where
+    mempty = undefined
+    mappend = undefined
+
+mayRankVoteToRankCount :: Maybe RankVote -> RankCount SBCandidate
+mayRankVoteToRankCount = undefined
+
+instance Monoid Tally where
+    mempty  = Tally mempty mempty mempty mempty mempty
+                    mempty mempty mempty mempty
+    mappend a b = Tally 
+                  (tgovernor a <> tgovernor b)
+                  (tprop1    a <> tprop1    b)
+                  (tprop2    a <> tprop2    b)
+                  (tprop45   a <> tprop45   b)
+                  (tprop46   a <> tprop46   b)
+                  (tprop47   a <> tprop47   b)
+                  (tprop48   a <> tprop48   b)
+                  (tlistvote a <> tlistvote b)
+                  (trankvote a <> trankvote b)
+
+voteToTally :: Vote -> Tally
+voteToTally v =  Tally
+                 (mayToCount             $ governor v)
+                 (mayToCount             $ prop1    v)
+                 (mayToCount             $ prop2    v)
+                 (mayToCount             $ prop45   v)
+                 (mayToCount             $ prop46   v)
+                 (mayToCount             $ prop47   v)
+                 (mayToCount             $ prop48   v)
+                 (mayListVoteToCount     $ listvote v)
+                 (mayRankVoteToRankCount $ rankvote v)
