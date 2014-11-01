@@ -60,29 +60,27 @@ instance FromField UTCTime where
                         Nothing -> empty
         where readTime = parseTime defaultTimeLocale "%m/%d/%Y %k:%M:%S"
 
-instance FromField ListVote where
+instance FromField a => FromField (ListVote a) where
     parseField = fmap ListVote
                . T.sequenceA
                . map parseField
                . BSSearch.split ", "
 
-instance FromNamedRecord (Maybe RankVote) where
+instance FromNamedRecord (Maybe (RankVote SBCandidate)) where
     parseNamedRecord r = if hasFields then pure <$> rankVote else pure empty
         where
             hasFields :: Bool
             hasFields = getAll $ foldMap All
                       $ map ((`elem` (HM.keys r)) . fromString) fields
-            rankVote :: Parser RankVote
-            rankVote = fmap (RankVote . Map.fromList . zip allCs)
+            rankVote :: Parser (RankVote SBCandidate)
+            rankVote = fmap (RankVote . Map.fromList . zip enumAll)
                      $ T.sequenceA
                      $ map ((r .:) . fromString) fields
             fields :: [String]
             fields = map (\c -> fromString $ "School Board [" ++ show c ++ "]")
-                         allCs
-            allCs :: [SBCandidate]
-            allCs = enumAll
+                         (enumAll :: [SBCandidate])
 
-instance FromNamedRecord (Maybe ListVote) where
+instance FromField a => FromNamedRecord (Maybe (ListVote a)) where
     parseNamedRecord r = if ("School Board" `elem` HM.keys r)
                             then pure <$> (r .: "School Board")
                             else pure empty

@@ -24,13 +24,13 @@ data Vote = Vote
     , prop46   :: Maybe Bool
     , prop47   :: Maybe Bool
     , prop48   :: Maybe Bool
-    , listvote :: Maybe ListVote
-    , rankvote :: Maybe RankVote
+    , listvote :: Maybe (ListVote SBCandidate)
+    , rankvote :: Maybe (RankVote SBCandidate)
     } deriving (Eq, Show)
 
-newtype ListVote = ListVote { unLV :: [SBCandidate] }
+newtype ListVote a = ListVote { unLV :: [a] }
     deriving (Eq, Show)
-newtype RankVote = RankVote { unRV :: Map.Map SBCandidate (Maybe Int) }
+newtype RankVote a = RankVote { unRV :: Map.Map a (Maybe Int) }
     deriving (Eq, Show)
 
 data GCandidate = Brown | Kashkari

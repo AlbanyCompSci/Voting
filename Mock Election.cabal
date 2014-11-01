@@ -16,9 +16,12 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Parse,
+  exposed-modules:     Main,
+                       Parse,
                        Types,
-                       Count
+                       Count,
+                       RankCount,
+                       Tally
   -- other-modules:       
   -- other-extensions:    
   build-depends:       base >=4.7 && <4.8,
