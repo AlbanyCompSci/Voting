@@ -2,7 +2,7 @@ module Count
     ( Count
     , mayToCount
     , mayListVoteToCount
-    , winner
+    --, winner
     ) where
 
 import qualified Data.Foldable as F
@@ -17,7 +17,7 @@ newtype Count a = Count { unCount :: M.Map a Int }
 
 instance Show a => Show (Count a) where
     show (Count m) = intercalate "\n"
-                   $ map (\(k,v) -> show k ++ ": " ++ show v ++ "\n")
+                   $ map (\(k,v) -> show k ++ ": " ++ show v)
                    $ M.toList m
 
 instance Ord a => Monoid (Count a) where
@@ -34,6 +34,7 @@ mayListVoteToCount (Just (ListVote [])) = Count M.empty
 mayListVoteToCount (Just (ListVote vs)) = Count $ M.fromList
                                         $ zip vs (repeat 1)
 
+{-
 newtype MaxKV k v = MaxKV { unMaxKV :: [(k,v)] }
 
 instance (Eq k, Ord v) => Monoid (MaxKV k v) where
@@ -51,3 +52,4 @@ maxsBy f = foldr accum []
 
 winner :: Eq a => Count a -> [a]
 winner = map fst . unMaxKV . F.foldMap (MaxKV . return) . M.toList . unCount
+-}

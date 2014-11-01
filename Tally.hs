@@ -48,25 +48,33 @@ data Tally = Tally
 
 instance Show Tally where
     show t = "Tally:\n" ++
-             "  Governor:\n"
-             ++ show (tgovernor t) ++
-             "  Proposition 1:\n"
-             ++ show (tprop1    t) ++
-             "  Proposition 2:\n"
-             ++ show (tprop2    t) ++
-             "  Proposition 45:\n"
-             ++ show (tprop45   t) ++
-             "  Proposition 45:\n"
-             ++ show (tprop46   t) ++
-             "  Proposition 46:\n"
-             ++ show (tprop46   t) ++
-             "  Proposition 47:\n"
-             ++ show (tprop47   t) ++
-             "  Proposition 48:\n"
-             ++ show (tprop48   t) ++
-             "  School Board (List Voting):\n"
-             ++ show (tlistvote t) ++
-             "  School Board (Rank Voting):\n"
+             "======\n" ++
+             "Governor:\n" ++
+             "---------\n"
+             ++ show (tgovernor t) ++ "\n\n" ++
+             "Proposition 1:\n" ++
+             "--------------\n"
+             ++ show (tprop1    t) ++ "\n\n" ++
+             "Proposition 2:\n" ++
+             "--------------\n"
+             ++ show (tprop2    t) ++ "\n\n" ++
+             "Proposition 45:\n" ++
+             "---------------\n"
+             ++ show (tprop45   t) ++ "\n\n" ++
+             "Proposition 46:\n" ++
+             "---------------\n"
+             ++ show (tprop46   t) ++ "\n\n" ++
+             "Proposition 47:\n" ++
+             "---------------\n"
+             ++ show (tprop47   t) ++ "\n\n" ++
+             "Proposition 48:\n" ++
+             "---------------\n"
+             ++ show (tprop48   t) ++ "\n\n" ++
+             "School Board (List Voting):\n" ++
+             "---------------------------\n"
+             ++ show (tlistvote t) ++ "\n\n" ++
+             "School Board (Rank Voting):\n" ++
+             "---------------------------\n"
              ++ show (trankvote t)
 
 instance Monoid Tally where

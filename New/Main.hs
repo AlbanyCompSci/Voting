@@ -8,9 +8,8 @@ import qualified Data.Map                      as M
 import           Data.Maybe                    (fromJust)
 import qualified Data.Vector                   as V
 
-import Tally
-import Types
-import Parse
+import Types    (VoteRecord(..))
+import Election (Ballot)
 
 main :: IO ()
 main = do
@@ -22,9 +21,13 @@ main = do
 
 tally :: BSL.ByteString -> BSL.ByteString -> Either String Tally
 tally listFile rankFile = do
-    (listHeader,listVotes) <- decodeByName listFile
-    (rankHeader,rankVotes) <- decodeByName rankFile
+    listVotes <- getVotes listFile
+    rankVotes <- getVotes rankFile
     let label = M.fromList . V.toList . fmap ((,) <$> username <*> id)
-    return $ F.foldMap voteToTally
+    return $ F.foldMap vote
            $ M.unionWith (fmap fromJust . reconcile)
              (label listVotes) (label rankVotes)
+
+-- exists mostly to provide type signature
+getVotes :: BSL.ByteString -> Either String (V.Vector (VoteRecord Ballot))
+getVotes = fmap snd . decodeByName
