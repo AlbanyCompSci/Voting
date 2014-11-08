@@ -4,10 +4,12 @@ module RankCount ( RankCount
     , resolve
     ) where
 
+import qualified Data.Foldable as F
 import           Data.Function (on)
 import           Data.List     (sortBy, intercalate)
 import qualified Data.Map      as M
-import           Data.Monoid   (Monoid, Sum(..), mappend, mempty, (<>))
+import           Data.Monoid   (Monoid, Sum(..), mappend, mconcat, mempty, (<>))
+import Debug.Trace (trace)
 
 import Types
 
@@ -32,17 +34,26 @@ mayRankVoteToRankCount (Just v) =
     $ M.toList
     $ unRV v
 
+epsilon = 0.001 -- TODO: make non hard coded
+
 resolve :: Ord a => Int -> RankCount a -> [a]
-resolve n c
-    | n >= length (M.keys $ unRC c) = M.keys $ unRC c
-    | otherwise = resolve n $ redistribute (1 / fromIntegral n) c
+resolve seats c
+    | M.size (unRC c) <= seats = trace "done" $ M.keys $ unRC c
+    | unredist  = trace ("thresh:" ++ show thresh) $ resolve seats $ redistribute thresh c
+    | otherwise = trace "otherwise" $ resolve seats $ eliminate c
+      where unredist      = (> 0) . M.size . M.filter (aboveThresh . fst) $ unRC c
+            aboveThresh s = abs (thresh - getSum s) > epsilon
+            thresh        = trace ("numVotes: " ++ show numVotes) $ (numVotes / (fromIntegral seats + 1)) + 1
+            numVotes      = getSum $ F.foldMap fst $ M.elems $ unRC c
 
 redistribute :: Ord a => Double -> RankCount a -> RankCount a
-redistribute thresh = M.foldrWithKey accum mempty . unRC . eliminate
-    where accum k (c,a) z = if getSum c > thresh
-                               then RankCount (M.singleton k (Sum thresh, mempty))
-                                    <> scale (getSum c - thresh) a
+redistribute thresh = M.foldrWithKey accum mempty . unRC
+    where accum k (c,a) z = if abs (getSum c - thresh) > epsilon
+                               then RankCount (M.singleton k (Sum thresh, a))
+                                 <> scale (getSum c - thresh) a
+                                 <> z
                                else RankCount (M.singleton k (c,a))
+                                 <> z
 
 eliminate :: Ord a => RankCount a -> RankCount a
 eliminate c = if M.null $ unRC c
