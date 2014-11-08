@@ -8,3 +8,6 @@ dist/
 
 # Testing data
 *.csv
+
+# results
+results.txt
