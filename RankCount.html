@@ -1,0 +1,83 @@
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="kw">module</span> <span class="dt">RankCount</span> <span class="kw">where</span>
+
+<span class="kw">import qualified</span> <span class="dt">Data.Foldable</span> <span class="kw">as</span> <span class="dt">F</span>
+<span class="kw">import           </span><span class="dt">Data.Function</span> (on)
+<span class="kw">import           </span><span class="dt">Data.List</span>     (intercalate, sortBy)
+<span class="kw">import qualified</span> <span class="dt">Data.Map</span>      <span class="kw">as</span> <span class="dt">M</span>
+<span class="kw">import           </span><span class="dt">Data.Monoid</span>   (<span class="dt">Monoid</span>, <span class="dt">Sum</span>(..), (&lt;&gt;), getSum, mappend, mempty)
+
+<span class="kw">import </span><span class="dt">Types</span> (<span class="dt">RankVote</span>(..), <span class="dt">SBCandidate</span>)</code></pre>
+Definition of the <code>RankCount</code> newtype (<code>* -&gt; *</code>) representing a vote or tally of votes for a slate of items (usually candidates) of type <code>a</code>. The underlying <code>Map</code> represents the relationship of an item/candidate key with the votes that are currently designated for them and a tally of votes representing how votes should have been designated in the absence of the item in the key (second, third choice etc.). A single vote will take the form of a singleton map for the first choice with a vote count of 1.0 and an alternative of the second choice (itself nesting the third choice and so on) (see <code>mayRankVoteToRankCount</code> for implementation of conversion to a single vote tally).
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="kw">newtype</span> <span class="dt">RankCount</span> a <span class="fu">=</span> <span class="dt">RC</span> {<span class="ot"> unRC ::</span> <span class="dt">M.Map</span> a (<span class="dt">Sum</span> <span class="dt">Double</span>,<span class="dt">RankCount</span> a) }</code></pre>
+<code>RankCount</code> is a monoid, which allows for easy <code>fold</code>ing of structures containing votes into tallies. The instance differs from the standard <code>Map</code> monoid instance in that it uses monoid appending <code>unionWith</code> instead of a plain <code>union</code> (which discards data from duplicate keys).
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="kw">instance</span> <span class="dt">Ord</span> a <span class="ot">=&gt;</span> <span class="dt">Monoid</span> (<span class="dt">RankCount</span> a) <span class="kw">where</span>
+    mempty                <span class="fu">=</span> <span class="dt">RC</span> <span class="fu">$</span> M.empty
+    mappend (<span class="dt">RC</span> a) (<span class="dt">RC</span> b) <span class="fu">=</span> <span class="dt">RC</span> <span class="fu">$</span> M.unionWith (<span class="fu">&lt;&gt;</span>) a b</code></pre>
+A (hopefully) reasonable epsilon for float comparison. <code>Double</code>s have been chosen over <code>Rational</code>s for performance, but introduce the complication of float comparison.
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="ot">epsilon ::</span> <span class="dt">Double</span>
+epsilon <span class="fu">=</span> <span class="fl">0.001</span></code></pre>
+Since there is not (to my knowledge) a reasonable way to maintain a running tally equivalent to a result for rank-choice voting, there <code>finalize</code> transforms a <code>RankCount</code> tally into a list of successful candidates for a given number of seats.
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="ot">finalize ::</span> <span class="dt">Ord</span> a <span class="ot">=&gt;</span> <span class="dt">Int</span> <span class="ot">-&gt;</span> <span class="dt">RankCount</span> a <span class="ot">-&gt;</span> [a]
+finalize seats tally</code></pre>
+If there are enough seats for all candidates, then finalization is done, and the list of all candidates (the keys to the map) is the result.
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell">    <span class="fu">|</span> done      <span class="fu">=</span> M.keys <span class="fu">$</span> unRC tally</code></pre>
+If there are still too many candidates, but some have already won, their votes abover threshold (see below) must be reallocated first before eliminating any candidates.
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell">    <span class="fu">|</span> unredist  <span class="fu">=</span> finalize seats <span class="fu">$</span> redistribute seats tally</code></pre>
+Otherwise, the lowest performing candidate must be eliminated so the alternative votes (secondary choices) associated with them can be reallocated.
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell">    <span class="fu">|</span> otherwise <span class="fu">=</span> finalize seats <span class="fu">$</span> eliminate tally</code></pre>
+The definitions for the above conditions:
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell">      <span class="kw">where</span>
+<span class="ot">          done ::</span> <span class="dt">Bool</span>
+          done <span class="fu">=</span> M.size (unRC tally) <span class="fu">&lt;=</span> seats
+<span class="ot">          unredist ::</span> <span class="dt">Bool</span>
+          unredist <span class="fu">=</span> M.size (M.filter (aboveThresh <span class="fu">.</span> getSum <span class="fu">.</span> fst) <span class="fu">$</span> unRC tally) <span class="fu">&gt;</span> <span class="dv">0</span>
+<span class="ot">          aboveThresh ::</span> <span class="dt">Double</span> <span class="ot">-&gt;</span> <span class="dt">Bool</span>
+          aboveThresh c <span class="fu">=</span> abs (c <span class="fu">-</span> (thresh seats tally)) <span class="fu">&gt;</span> epsilon</code></pre>
+The Droop quota (<span class="math">$\lparen\frac{\text{Total Valid Poll}}{\text{Seats} + 1}\rparen + 1$</span>)
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="ot">thresh ::</span> <span class="dt">Int</span> <span class="ot">-&gt;</span> <span class="dt">RankCount</span> a <span class="ot">-&gt;</span> <span class="dt">Double</span>
+thresh seats tally <span class="fu">=</span> numVotes <span class="fu">/</span> (fromIntegral seats <span class="fu">+</span> <span class="dv">1</span>) <span class="fu">+</span> <span class="dv">1</span>
+  <span class="kw">where</span> numVotes <span class="fu">=</span> getSum <span class="fu">$</span> F.foldMap fst <span class="fu">$</span> unRC tally</code></pre>
+For some reason this isn't standard, however, it just provides a <code>Fractional</code> instance for all <code>Sum</code>s for <code>Fractional</code> types.
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="kw">instance</span> <span class="dt">Fractional</span> a <span class="ot">=&gt;</span> <span class="dt">Fractional</span> (<span class="dt">Sum</span> a) <span class="kw">where</span>
+    fromRational <span class="fu">=</span> <span class="dt">Sum</span> <span class="fu">.</span> fromRational
+    recip        <span class="fu">=</span> <span class="dt">Sum</span> <span class="fu">.</span> recip <span class="fu">.</span> getSum</code></pre>
+Partially redistribute votes for candidate who are over quota.
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="co">-- TODO: ordering of candidates (redistribute highest first?)</span>
+<span class="ot">redistribute ::</span> <span class="dt">Ord</span> a <span class="ot">=&gt;</span> <span class="dt">Int</span> <span class="ot">-&gt;</span> <span class="dt">RankCount</span> a <span class="ot">-&gt;</span> <span class="dt">RankCount</span> a</code></pre>
+Iterate over all candidates, proportionally reallocating excess votes if they are over quota.
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell">redistribute seats (<span class="dt">RC</span> votes) <span class="fu">=</span> M.foldrWithKey accum mempty votes</code></pre>
+If (within float tolerance) a candidate is above quota:
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell">  <span class="kw">where</span>
+      <span class="co">-- accum :: a -&gt; (Sum Double,RankCount a) -&gt; RankCount a -&gt; RankCount a</span>
+      accum k (vs,alt) z <span class="fu">=</span> <span class="kw">if</span> abs (getSum <span class="fu">$</span> vs <span class="fu">-</span> thresh&#39;) <span class="fu">&gt;</span> epsilon</code></pre>
+Scale the votes they are currently recieving down to the threshold, combine it with the excess proportion of the alternatives along with the accumulator tally.
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell">        <span class="kw">then</span> (scale (getSum <span class="fu">$</span> (thresh&#39; <span class="fu">/</span> vs)) <span class="fu">$</span> <span class="dt">RC</span> <span class="fu">$</span> M.singleton k (vs,alt))
+          <span class="fu">&lt;&gt;</span> scale (getSum <span class="fu">$</span> (vs <span class="fu">-</span> thresh&#39;) <span class="fu">/</span> vs) alt
+          <span class="fu">&lt;&gt;</span> z</code></pre>
+Otherwise, add all of the candidates votes back to the accumulator tally.
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell">        <span class="kw">else</span> (<span class="dt">RC</span> <span class="fu">$</span> M.singleton k (vs,alt))
+          <span class="fu">&lt;&gt;</span> z
+      thresh&#39; <span class="fu">=</span> <span class="dt">Sum</span> <span class="fu">$</span> thresh seats <span class="fu">$</span> <span class="dt">RC</span> votes</code></pre>
+Multiply all votes (and their alternatives) by a scalar.
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="ot">scale ::</span> <span class="dt">Double</span> <span class="ot">-&gt;</span> <span class="dt">RankCount</span> a <span class="ot">-&gt;</span> <span class="dt">RankCount</span> a
+scale k (<span class="dt">RC</span> votes) <span class="fu">=</span> <span class="dt">RC</span> <span class="fu">$</span> fmap (\(vs,alt) <span class="ot">-&gt;</span> (<span class="dt">Sum</span> k <span class="fu">*</span> vs,scale k alt)) votes</code></pre>
+Eliminate the lowest performing candidate and reallocate their votes.
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="co">-- TODO: case of equal losers</span>
+<span class="ot">eliminate ::</span> <span class="dt">Ord</span> a <span class="ot">=&gt;</span> <span class="dt">RankCount</span> a <span class="ot">-&gt;</span> <span class="dt">RankCount</span> a</code></pre>
+Delete the loser and add the associated alternative votes to the top level of the map.
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell">eliminate (<span class="dt">RC</span> votes) <span class="fu">=</span> mappend alt <span class="fu">$</span> <span class="dt">RC</span> <span class="fu">$</span> M.delete loser votes
+  <span class="kw">where</span> loser <span class="fu">=</span> fst losingEntry
+        alt   <span class="fu">=</span> snd <span class="fu">.</span> snd <span class="fu">$</span> losingEntry
+        losingEntry <span class="fu">=</span> head <span class="fu">$</span> sortBy (compare <span class="ot">`on`</span> (fst <span class="fu">.</span> snd)) <span class="fu">$</span> M.toList votes</code></pre>
+Convert a (possibly non-existent) ranked vote (<code>Maybe (RankVote a)</code>) into a tally. In hindsight, these two type could probably have been combine (which is one of the things I am trying in the <code>New</code> directory). This is done by ordering candidates, then nesting them(in reverse order) into a <code>RankCount</code> tally.
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="ot">mayRankVoteToRankCount ::</span> <span class="dt">Maybe</span> (<span class="dt">RankVote</span> <span class="dt">SBCandidate</span>) <span class="ot">-&gt;</span> <span class="dt">RankCount</span> <span class="dt">SBCandidate</span>
+mayRankVoteToRankCount <span class="dt">Nothing</span>      <span class="fu">=</span> mempty
+mayRankVoteToRankCount (<span class="dt">Just</span> tally) <span class="fu">=</span> foldr (\k z <span class="ot">-&gt;</span> <span class="dt">RC</span> <span class="fu">$</span> M.singleton k (<span class="dt">Sum</span> <span class="fl">1.0</span>,z)) mempty
+                                    <span class="fu">$</span> reverse
+                                    <span class="fu">$</span> map fst
+                                    <span class="fu">$</span> sortBy (compare <span class="ot">`on`</span> snd)
+                                    <span class="fu">$</span> M.toList
+                                    <span class="fu">$</span> unRV tally</code></pre>
+Ugly <code>Show</code> instance for RankCount, shows the list of successful candidates on seperate lines. The show should really not include the finalization step, but this eases integration into the simplistic frontend which assumes a simple <code>Show</code> instance (this is another one of the issues I am working on in the <code>New</code> directory).
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="kw">instance</span> (<span class="dt">Ord</span> a, <span class="dt">Show</span> a) <span class="ot">=&gt;</span> <span class="dt">Show</span> (<span class="dt">RankCount</span> a) <span class="kw">where</span>
+    show tally <span class="fu">=</span> intercalate <span class="st">&quot;\n&quot;</span> <span class="fu">$</span> map show <span class="fu">$</span> finalize <span class="dv">3</span> tally</code></pre>
